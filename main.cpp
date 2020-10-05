@@ -9,12 +9,10 @@
 void createRandomMessage(std::vector<bool>& message)
 {
 	std::srand(static_cast<unsigned int>(std::time(nullptr)));
-	std::rand();
+	std::rand(); //discard first result
 
 	for (auto&& i: message)
-	{
 		i = std::rand() % 2;
-	}
 
 }
 
@@ -27,15 +25,26 @@ int power(const int a, const int b)
 	return answer;
 }
 
-int numberOfParityBits(const int m)
+int calculateCodeLength(const int m)
 {
-	// number of parity bits, p, required: 2^p >= p + m + 1
+	// number of parity bits, p, required: 2^p >= p + m + 1, where m is the length of the message
 	int p{ 1 };
 
 	while (power(2, p) - p < m + 1)
 		p++;
 
-	return p;
+	return p + m + 1;
+}
+
+int calculateMessageLength(const int l)
+{
+	// number of parity bits, p, in a code of length l: 2^p >= l, 
+	int p{ 1 };
+
+	while (power(2, p) < l)
+		p++;
+
+	return l - (p + 1);
 }
 
 void printMessage(const std::vector<bool>& message)
@@ -58,7 +67,7 @@ int checkCodeParity(const std::vector<bool>& code)
 
 std::vector<bool> createCode(const std::vector<bool>& message, const int messageLength)
 {
-	int codeLength{ numberOfParityBits(messageLength) + messageLength + 1 };
+	int codeLength{ calculateCodeLength(messageLength) };
 
 	std::vector<bool> code(codeLength);
 
@@ -100,82 +109,139 @@ std::vector<bool> createCode(const std::vector<bool>& message, const int message
 
 	for (int parityBit{ 1 }; parityBit < code.size(); parityBit <<= 1)
 		if (parityBit & result)
-		{
 			code[parityBit] = 1;
-			//std::cout << "Parity bit " << parityBit << " set to 1" << '\n';
-		}
 
 	//Set 0th bit to make the parity of the whole code even
 	//If there are two errors, this will allow them to be detected, though their positions won't be known
 	//Determine current parity of the code
 	
 	if (checkCodeParity(code))
-		//If the parity is odd, set 0th bit to 1 to make whole code even
+		//If the parity is odd, set 0th bit to 1 to make the whole code even
 		code[0] = 1;
 
 	return code;
 }
 
-void addError(std::vector<bool>& codeCopy)
+void addError(std::vector<bool>& code)
 {
-	int randomBit{ std::rand() % static_cast<int>(codeCopy.size() + 1) };
+	//choose a randon bit in the code
+	int randomBit{ std::rand() % static_cast<int>(code.size()) };
 	
-	std::cout << "(Bit " << randomBit << " changed.)\n";
+	std::cout << "\nBit " << randomBit << " changed.";
 
-	codeCopy[randomBit] = (codeCopy[randomBit] + 1) % 2;
+	code[randomBit] = (code[randomBit] + 1) % 2;
 
 }
 
-void checkError(const std::vector<bool>& code)
+int checkError(const std::vector<bool>& code)
 {
-	int result{};
+	//take the bitwise XOR of the positions of each bit in the code that is turned on
+	//if there are no errors, this will return 0, since the parity bits were set to esnure this
+	//if there is exactly one error, it will return the position of the error.
+	//if there are two or more errors, it will return a positive number, but the positions of the errors cannot be determined
+	int errorPosition{};
 	int bitNumber{};
 	for (const auto bit : code)
 	{
-		result = result ^ (bit * bitNumber);
+		errorPosition = errorPosition ^ (bit * bitNumber);
 		bitNumber++;
 	}
 
-	if (result)
+	//check if there are any errors - if there are no errors, errorPosition will be equal to zero
+	if (errorPosition)
+		//if there are errors, check the parity of the code whole code. If even (i.e. = 0), there must be two or more errors thanks to the use of the 0th bit
 		if (!checkCodeParity(code))
 		{
 			std::cout << "\nThere are two or more errors in the code at unknown positions.\n";
+			return 0;
 		}
+		
+		//if the parity is odd, there is one error with the value of result being its position.
 		else
-			std::cout << "\nThere is an error at position " << result << ". This will be corrected.\n";
+		{
+			std::cout << "\nThere is an error at position " << errorPosition << ".\n";
+			return errorPosition;
+		}
 	else
+	{
 		std::cout << "\nThere are no errors in the code.\n";
-
+		return 0;
+	}
 }
 
+void correctError(const int errorPosition, std::vector<bool>& code)
+{
+	code[errorPosition] = (code[errorPosition] + 1) % 2;
+}
+
+void extractMessage(std::vector<bool>& code)
+{
+	//the length of the original message is not sent in the code, so need to calculate it:
+	std::vector<bool> extractedMessage(calculateMessageLength(code.size()+1));
+	
+	int codePosition{ 0 };
+	int messagePosition{ 0 };
+	int parityBitCount{ 0 };
+
+	for (auto bit : code)	
+	{
+		//0th bit is never a message bit, so skip
+		if (codePosition == 0)
+			codePosition++;
+		//if the current bit is a parity bit, skip
+		else if (codePosition == power(2, parityBitCount))	
+		{
+			codePosition++;
+			parityBitCount++;	
+		}
+		//otherwise the current bit must be a message bit, so add it to extractedMessage
+		else
+		{
+			extractedMessage[messagePosition] = bit;
+			codePosition++;
+			messagePosition++;
+		}
+	}
+	std::cout << "\nThe final message with an error corrected if possible:\n";
+	printMessage(extractedMessage);
+}
 
 int main()
 {
-	int messageLength{11};
-	//std::cout << "Enter length of code: ";
-	//std::cin >> n;
+	int messageLength{};
+	std::cout << "Enter length of code: ";
+	std::cin >> messageLength;
 
-	std::vector<bool> message(messageLength);
-
+	//create a vector and generate a random message
+	std::vector<bool> message(messageLength); 
 	createRandomMessage(message);
 	std::cout << "Initial message:\n";
 	printMessage(message);
 
+	//create a vector containing the encoded message
 	std::vector<bool> code{ (createCode(message, messageLength)) };
 	std::cout << "\nMessage with code added:\n";
 	printMessage(code);
 
+	//create a copy of the code and add one or two errors
 	std::vector<bool> codeCopy(code);
-
 	addError(codeCopy);
 	if (std::rand() % 2 == 0)
 		addError(codeCopy);
 	std::cout << "\nCode with bits changed:\n";
-
 	printMessage(codeCopy);
 
-	checkError(codeCopy);
+	//check the code for errors
+	int errorPosition(checkError(codeCopy));
+	if (errorPosition)
+	{
+		std::cout << "Code with error corrected:\n";
+		correctError(errorPosition, codeCopy);
+		printMessage(codeCopy);
+	};
 
+	//extract and print the message, either corrected or with two errors.
+	extractMessage(codeCopy);
 
 	return 0;
 }
