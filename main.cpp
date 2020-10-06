@@ -177,7 +177,7 @@ void correctError(const int errorPosition, std::vector<bool>& code)
 void extractMessage(std::vector<bool>& code)
 {
 	//the length of the original message is not sent in the code, so need to calculate it:
-	std::vector<bool> extractedMessage(calculateMessageLength(code.size()+1));
+	std::vector<bool> extractedMessage(calculateMessageLength(code.size()));
 	
 	int codePosition{ 0 };
 	int messagePosition{ 0 };
